@@ -1,0 +1,9 @@
+[CmdletBinding(SupportsShouldProcess=$true)]
+param([switch]$RebuildCounters,[switch]$ResyncWmi,[string]$ProcessName,[switch]$RestartProcess,[switch]$RestartWmi,[string]$OutputPath="$env:USERPROFILE\Desktop\PerformanceCounterRepair")
+$ErrorActionPreference='Stop';New-Item -ItemType Directory -Path $OutputPath -Force|Out-Null;$Log=Join-Path $OutputPath ("repair-{0:yyyyMMdd-HHmmss}.log"-f(Get-Date));function L($m){"$(Get-Date -Format s) $m"|Tee-Object -FilePath $Log -Append};if(-not($RebuildCounters-or$ResyncWmi-or$RestartProcess-or$RestartWmi)){throw'Choose at least one repair action.'}
+Get-Counter '\Processor(_Total)\% Processor Time','\Memory\Available MBytes' -ErrorAction SilentlyContinue|Export-Clixml (Join-Path $OutputPath 'before.xml')
+if($RebuildCounters-and$PSCmdlet.ShouldProcess('Performance counter registry','Rebuild')){lodctr /R|Tee-Object -FilePath $Log -Append;L'Counter registry rebuilt.'}
+if($ResyncWmi-and$PSCmdlet.ShouldProcess('WMI performance classes','Resynchronise')){winmgmt /resyncperf|Tee-Object -FilePath $Log -Append;L'WMI performance classes resynchronised.'}
+if($RestartWmi-and$PSCmdlet.ShouldProcess('Winmgmt','Restart service')){Restart-Service Winmgmt -Force;L'WMI service restarted.'}
+if($RestartProcess){if([string]::IsNullOrWhiteSpace($ProcessName)){throw'-ProcessName is required.'};$p=Get-Process $ProcessName -ErrorAction Stop;$path=$p.Path;if($PSCmdlet.ShouldProcess($ProcessName,'Restart process')){$p|Stop-Process -Force;if($path){Start-Process $path};L"Restarted $ProcessName"}}
+Get-Counter '\Processor(_Total)\% Processor Time','\Memory\Available MBytes' -ErrorAction SilentlyContinue|Export-Clixml (Join-Path $OutputPath 'after.xml');L'Repair workflow finished.'
